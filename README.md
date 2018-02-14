@@ -26,36 +26,37 @@ The WebAssembly Module Signature shall provide the following features
 - A module may contain just one signatures (may be extended in future)
 - A signature signs the all present sections of the data stream, as is.
 - The section name "signature" (9 chars) is the default signature.
-- The payload of the custom-section contains the ECDSA signature; the complete section has octet-size 86.
+- The payload of the custom-section contains the ECDSA signature; the complete section has octet-size 118.
 - New signature-sections shall be appended to the end of a module only.
-- Removing the last 86 bytes from a module-bytecode, the signature-section is cut off.
+- Removing the last 118 bytes from a module-bytecode, the signature-section is cut off.
+- The tool shall support secp256k1 in initial version and in future versions Ed25519 and secp384r1 (hence the reserved bytes at end)
 
 
-
-Each signature section ist formed of a sequence of 86 octets:
+Each signature section ist formed of a sequence of 118 octets:
 
 Fields                   |         Bytes
 ------------------------ | ----------------------------------------------------------------------------- 
-Section Type (Custom):   |   `0x0`                                                                       
-Section Size:            |   `0x84`                                                                     
-Section Name Length:     |   `0x9`                                                                      
-Section Name Octets [9]: |   `[0x115, 0x105, 0x103, 0x110, 0x97, 0x116, 0x117, 0x114, 0x101]`            
-Signature Type   :       |   `0x0` which stands for ECDSA/SHA256 with max signature length of 72 bytes   
-Signature length:        |   Byte value between 70 and 72                                                
-Signature:               |   `[...]`                                                                     
-Padding bytes:           |   0..3 padding bytes to fill up the gap between signature length and value 72
+Section Type (Custom):   |   `0x0`
+Section Size:            |   `0x84`
+Section Name Length:     |   `0x9`
+Section Name Octets [9]: |   `[0x115, 0x105, 0x103, 0x110, 0x97, 0x116, 0x117, 0x114, 0x101]`
+Signature Type   :       |   `0x0` which stands for ECDSA/SHA256 with max digest length of max. 72 bytes
+Signature length:        |   Single byte value 72 or less
+Signature:               |   `[...]`
+Padding bytes:           |   0..33 padding bytes filling extending the digest-length to up to 104 bytes (secp384r1)
 
 - **Index 12** SIGNATURE_TYPE (for know only 0==secp256k1/SHA256 is defined)
 - **Index 13** ECDSA_DATA_LENGTH, may range between 72 and less, filled up by padding bytes
 - **Index 14** ECDSA_DATA_START, first byte of ECDSA digest
 - **Index 14+ECDSA_DATA_LENGTH**, end of the digest
  
-In case the digest has byte size 72 the preamble is, followed by the ECDSA digest:
+In case the digest has byte size 72 (secp256k1) the preamble looks like (followed by the ECDSA digest):
 ```
 [0, 84, 9, 115, 105, 103, 110, 97, 116, 117, 114, 101, 0, 72 ]
 ```
 
 The digest is calculated using ciphers secp256k1/SHA256.
+Trailing padding bytes fill up to total length of 118 bytes.
 
 ## Usage
 

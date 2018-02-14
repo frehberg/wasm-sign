@@ -26,17 +26,17 @@ use parity_wasm::elements::{
 };
 
 const DEFAULT_SECTION_NAME: &str = "signature";
-const CUSTOM_SECTION_SIZE: usize = 86;
-const ECDSA_SIGNATURE_SIZE: usize = 72;
-const VERSION: u8 = 0;
-const PAD: u8 = 0;
-
 const CUSTOM_SECTION_HEAD_SIZE: usize = 12;
 const CUSTOM_SECTION_PAYLOAD_START: usize = CUSTOM_SECTION_HEAD_SIZE;
 
 const PAYLOAD_VER_IDX: usize = 0;
 const PAYLOAD_LEN_IDX: usize = 1;
 const PAYLOAD_ECDSA_IDX: usize = 2;
+const ECDSA_SIGNATURE_SIZE_MAX: usize = 104; // secp256k1 72 bytes, secp384r1 104 bytes
+const CUSTOM_SECTION_SIZE: usize = CUSTOM_SECTION_HEAD_SIZE + 2 + ECDSA_SIGNATURE_SIZE_MAX; // 118
+const VERSION: u8 = 0;
+const PAD: u8 = 0;
+
 
 #[derive(Debug)]
 pub enum WasmError { NoSignature, BadVersion, BadCipher, MalformedKey, MalformedModule, HasSignature, InternalError }
@@ -50,12 +50,12 @@ fn to_module(mut bytecode: &[u8]) -> Result<Module, Error>
     Module::deserialize(&mut bytecode)
 }
 
-fn create_signer<'a>(pkey: &'a PKey<openssl::pkey::Private>) -> Result<Signer<'a>, WasmError>
+fn create_signer<'a>(pkey: &'a PKey<openssl::pkey::Private> ) -> Result<Signer<'a>, WasmError>
 {
     match Signer::new(MessageDigest::sha256(), &pkey) {
         Ok(signer) => match signer.len() {
-            Ok(len) if len == ECDSA_SIGNATURE_SIZE => Result::Ok(signer),
-            Ok(len) if len != ECDSA_SIGNATURE_SIZE => Result::Err(WasmError::BadCipher),
+            Ok(len) if len <= ECDSA_SIGNATURE_SIZE_MAX => Result::Ok(signer),
+            Ok(len) if len > ECDSA_SIGNATURE_SIZE_MAX => Result::Err(WasmError::BadCipher),
             _ => Result::Err(WasmError::BadCipher),
         },
         _ => Result::Err(WasmError::BadCipher),
@@ -113,7 +113,7 @@ impl Config {
 
         let mut signature = sign(&mut signer, bytecode.as_ref())?;
 
-        let required_padding = signer.len().unwrap() - signature.len();
+        let required_padding = ECDSA_SIGNATURE_SIZE_MAX - signature.len();
 
         let mut custom: CustomSection = Default::default();
 
@@ -164,7 +164,7 @@ impl Config {
         let ecdsa_data =
             &custom_section_payload[PAYLOAD_ECDSA_IDX..(len + PAYLOAD_ECDSA_IDX)];
 
-        if *ver != VERSION || len > ECDSA_SIGNATURE_SIZE {
+        if *ver != VERSION || len > ECDSA_SIGNATURE_SIZE_MAX {
             return Result::Err(WasmError::NoSignature);
         }
 
@@ -352,6 +352,7 @@ mod tests {
     use super::*;
     use base64::decode;
 
+
     const PRIVATE_KEY_SECP256K1: &[u8] = b"-----BEGIN EC PRIVATE KEY-----
 MHQCAQEEILz/A1lrSfoGyINIiy0Ip7OTNHCbpH5W89235ulbVneOoAcGBSuBBAAK
 oUQDQgAEEglOsMyoScjUMuUomECq1U6gaPUEfOmvOYBjxBEdd8fN5ZfFHYeQwNAs
@@ -365,6 +366,22 @@ OYBjxBEdd8fN5ZfFHYeQwNAs+kK96P1/ODkqQTTKv18kDanmsavXYw==
 -----END PUBLIC KEY-----";
 
 
+    const PRIVATE_KEY_SECP384R1: &[u8] = b"-----BEGIN EC PRIVATE KEY-----
+MIGkAgEBBDDp7Z74viFQDPzWuk4tt5SahPbyCm6WQbU9HdMg4jK9OfzAd/YpBDju
+Xu7YstRrJYSgBwYFK4EEACKhZANiAARDf5u2T0SdjCsOsNbxBCidgozBeWHZ3luE
+aIFsOGDGOgiDynKaTAUhf7oOvMhJi0r32ocfATgPyPso7fvLvjJKJ7PaHRxErqZg
+wAqxaRDUW47eolEjWjhgvljw8K2Ib4s=
+-----END EC PRIVATE KEY-----
+";
+
+    const PUBLIC_KEY_SECP384R1: &[u8] = b"-----BEGIN PUBLIC KEY-----
+MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEQ3+btk9EnYwrDrDW8QQonYKMwXlh2d5b
+hGiBbDhgxjoIg8pymkwFIX+6DrzISYtK99qHHwE4D8j7KO37y74ySiez2h0cRK6m
+YMAKsWkQ1FuO3qJRI1o4YL5Y8PCtiG+L
+-----END PUBLIC KEY-----
+";
+
+
     const WASM_BASE64: &str =
         "AGFzbQEAAAAADAZkeWxpbmuAgMACAAGKgICAAAJgAn9/AX9gAAACwYCAgAAEA2VudgptZW1vcnlCYXNl\
             A38AA2VudgZtZW1vcnkCAIACA2VudgV0YWJsZQFwAAADZW52CXRhYmxlQmFzZQN/AAOEgICAAAMAAQEGi\
@@ -373,15 +390,33 @@ OYBjxBEdd8fN5ZfFHYeQwNAs+kK96P1/ODkqQTTKv18kDanmsavXYw==
             ACyACQQFqIgIgAEcNAAsgAAsLg4CAgAAAAQuVgICAAAACQCMAJAIjAkGAgMACaiQDEAELCw==";
 
     #[test]
-    fn test_to_private_key() {
+    fn test_to_private_key_secp256k1() {
         assert!(PRIVATE_KEY_SECP256K1.len() > 0);
         assert!(to_private_key(PRIVATE_KEY_SECP256K1).is_ok());
     }
 
     #[test]
-    fn test_to_public_key() {
+    fn test_to_public_key_secp256k1() {
         assert!(PUBLIC_KEY_SECP256K1.len() > 0);
         assert!(to_public_key(PUBLIC_KEY_SECP256K1).is_ok());
+    }
+
+    #[test]
+    fn test_to_private_key_secp384r1() {
+        assert!(PRIVATE_KEY_SECP384R1.len() > 0);
+        assert!(to_private_key(PRIVATE_KEY_SECP384R1).is_ok());
+
+        let pkey = to_private_key(PRIVATE_KEY_SECP384R1).unwrap();
+        let signer = Signer::new(MessageDigest::sha384(), &pkey).unwrap();
+        println!("secp384r1-len={}", signer.len().unwrap());
+
+    }
+
+    #[test]
+    fn test_to_public_key_secp384r1() {
+        assert!(PUBLIC_KEY_SECP384R1.len() > 0);
+        assert!(to_public_key(PUBLIC_KEY_SECP384R1).is_ok());
+
     }
 
     #[test]

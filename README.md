@@ -36,23 +36,26 @@ Each signature section ist formed of a sequence of 118 octets:
 
 Fields                   |         Bytes
 ------------------------ | ----------------------------------------------------------------------------- 
-Section Type (Custom):   |   `0x0`
-Section Size:            |   `0x84`
-Section Name Length:     |   `0x9`
-Section Name Octets [9]: |   `[0x115, 0x105, 0x103, 0x110, 0x97, 0x116, 0x117, 0x114, 0x101]`
-Signature Type   :       |   `0x0` which stands for ECDSA/SHA256 with max digest length of max. 72 bytes
+Section Type (Custom):   |   `0`
+Section Size:            |   `116`
+Section Name Length:     |   `9`
+Section Name Octets [9]: |   `[115, 105, 103, 110, 97, 116, 117, 114, 101]` (read as  "signature")
+Signature Type   :       |   `0` which stands for ECDSA/SHA256 with max digest length of max. 72 bytes
 Signature length:        |   Single byte value 72 or less
 Signature:               |   `[...]`
 Padding bytes:           |   0..33 padding bytes filling extending the digest-length to up to 104 bytes (secp384r1)
 
-- **Index 12** SIGNATURE_TYPE (for know only 0==secp256k1/SHA256 is defined)
-- **Index 13** ECDSA_DATA_LENGTH, may range between 72 and less, filled up by padding bytes
-- **Index 14** ECDSA_DATA_START, first byte of ECDSA digest
-- **Index 14+ECDSA_DATA_LENGTH**, end of the digest
+The signature is always attached to the end of a WASM-file. If receiving a signed WASM-file, the last 118 characters can be cut off to get the WASM-Signature section. The following indeces permit verification of the signature using  command line tools or Javascript, without the need to parse the WASM-module-bytecodes:
+
+- **Index 0..11** Fixed byte-sequence `[0, 116, 9, 115, 105, 103, 110, 97, 116, 117, 114, 101]`
+- **Index 12** SIGNATURE_TYPE (the only valid value is '0' for curve secp256k1/SHA256 for now)
+- **Index 13** DIGEST_DATA_LENGTH, may range between 65..104 (if using secp256k1 usually a value of 70 or 71 or 72)
+- **Index 14** DIGEST_DATA_START, first byte of digest
+- **Index 14+DIGEST_DATA_LENGTH**, end of the digest
  
 In case the digest has byte size 72 (secp256k1) the preamble looks like (followed by the ECDSA digest):
 ```
-[0, 84, 9, 115, 105, 103, 110, 97, 116, 117, 114, 101, 0, 72 ]
+[0, 116, 9, 115, 105, 103, 110, 97, 116, 117, 114, 101, 0, 72 ]
 ```
 
 The digest is calculated using ciphers secp256k1/SHA256.
@@ -88,13 +91,14 @@ wasm-sign -v -k signerkey.pub.pem signed-module.wasm
 Output of `hexdump -C signed-module.wasm`:
 
 ```
-00000120  .. .. .. .. .. .. .. 00  54 09 73 69 67 6e 61 74  |j$......T.signat|
-00000130  75 72 65 00 47 30 45 02  21 00 a3 32 3e 3b 82 05  |ure.G0E.!..2>;..|
-00000140  e7 d1 93 8a 6a 2d 6e 8c  8c 1d 6d cd 54 5e 2d 04  |....j-n...m.T^-.|
-00000150  f4 57 4f fd 00 b7 d2 7b  6f fd 02 20 56 32 33 97  |.WO....{o.. V23.|
-00000160  55 7c b2 93 06 62 7b d6  0f a2 f4 e0 8f 6c b8 13  |U|...b{......l..|
-00000170  0b ae c4 55 5b 37 26 52  b8 61 6e 6d 00           |...U[7&R.anm.|
-0000017d
+00000110
+00000120  xx xx xx xx xx xx xx 00  74 09 73 69 67 6e 61 74  |j$......t.signat|
+00000130  75 72 65 00 47 30 45 02  20 58 20 79 4b 91 52 39  |ure.G0E. X yK.R9|
+00000140  75 52 69 f0 cf dc 81 8a  7c d8 ab 08 1d 49 ab c2  |uRi.....|....I..|
+00000150  fa 19 79 f5 03 92 e9 9b  87 02 21 00 8f a0 ad 5a  |..y.......!....Z|
+00000160  f2 55 ce cf c6 ed 82 15  5a ed 7a 47 43 d9 e5 4e  |.U......Z.zGC..N|
+00000170  fd 74 79 e8 80 4e 82 9c  08 eb 8e 9a 00 00 00 00  |.ty..N..........|
+00000180  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
 ```
 
 ## Build

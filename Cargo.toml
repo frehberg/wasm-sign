@@ -2,7 +2,7 @@
 name = "wasm-sign"
 version = "0.1.0"
 authors = ["Frank Rehberger <frehberg@gmail.com>"]
-description = "WebAssembly module signing and verification tool to proof authenticity and integrity of WebAssembly bytecodes. The signature is attached as Custom-Section to the end of th module. The signed module can be transfered over network. Recipients parsing the signed module will 'see' an additional Custom-Section of type 0 and name 'signature'. The Signature adds an overhead of 86 bytes."
+description = "WebAssembly module signing and verification tool to proof authenticity and integrity of WebAssembly bytecodes. The signature is attached as Custom-Section to the end of th module. The signed module can be transmitted over network. Recipients parsing the signed module will 'see' an additional Custom-Section of type 0 and name 'signature'. The Signature adds an overhead of 118 bytes."
 
 license = "Apache-2.0"
 documentation = "https://github.com/frehberg/wasm-sign"

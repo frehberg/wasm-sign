@@ -19,7 +19,7 @@ repository = "https://github.com/frehberg/wasm-sign"
 env_logger = { version = "0.5", default-features = false }
 getopts = "0.2"
 parity-wasm = "0.24.1"
-wasm-sign = { path = "wasm-sign" }
+wasm-sign = { path = "wasm-sign", version = "0.2" }
 log = "0.4"
 base64 = "0.9"
 
